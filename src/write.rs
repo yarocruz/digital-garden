@@ -1,6 +1,6 @@
 use color_eyre::{eyre::WrapErr, Result};
 use edit::{edit_file, Builder};
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::PathBuf;
 
 const TEMPLATE: &[u8; 2] = b"# ";
@@ -19,8 +19,28 @@ pub fn write(garden_path: PathBuf, title: Option<String>) -> Result<()> {
     edit_file(filepath)?;
     // read the user's changes back from the file into a string
     let mut contents = String::new();
+    file.seek(SeekFrom::Start(0))?;
     file.read_to_string(&mut contents)?;
 
-    dbg!(contents, title);
+    // use `title` if the user passed it,
+    // otherwise try to find a heading in the markdown
+    let document_title = title.or_else(||{
+        contents
+            .lines()
+            .find(|line |line.starts_with("# "))
+            // markdown heading are required to have `# ` with
+            // at least one space
+            .map(|maybe_line| {
+                maybe_line
+                    .trim_start_matches("# ")
+                    .to_string()
+            })
+    });
+
+    // dbg!(garden_path, title);
+    // let template = "# ";
+    // let content_from_user = edit::edit(template)
+    //     .wrap_err("unable to read writing")?;
+    dbg!(contents, document_title);
     todo!()
 }
