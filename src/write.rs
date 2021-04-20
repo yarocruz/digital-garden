@@ -1,7 +1,8 @@
-use color_eyre::{eyre::WrapErr, Result};
+use color_eyre::{eyre::WrapErr, owo_colors::OwoColorize, Result};
 use edit::{edit_file, Builder};
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::fs;
 
 const TEMPLATE: &[u8; 2] = b"# ";
 
@@ -16,7 +17,7 @@ pub fn write(garden_path: PathBuf, title: Option<String>) -> Result<()> {
     file.write_all(TEMPLATE)?;
     // let the user write whatever they want in their favorite editor
     // before returning to the CLI and finishing up
-    edit_file(filepath)?;
+    edit_file(&filepath)?;
     // read the user's changes back from the file into a string
     let mut contents = String::new();
     file.seek(SeekFrom::Start(0))?;
@@ -40,18 +41,41 @@ pub fn write(garden_path: PathBuf, title: Option<String>) -> Result<()> {
     let filename = match document_title {
         Some(raw_title) => confirm_filename(&raw_title),
         None => ask_for_filename(),
-    };
-    dbg!(contents, filename);
-    todo!()
+    }?;
+    let mut i: usize = 0;
+    loop {
+        let dest_filename = format!(
+            "{}{}",
+            filename,
+            if i == 0 {
+                "".to_string()
+            } else {
+                i.to_string()
+            }
+        );
+        let mut dest = garden_path.join(dest_filename);
+        dest.set_extension("md");
+        if dest.exists() {
+            i = i + 1;
+        } else {
+            fs::rename(filepath, &dest)?;
+            break;
+        }
+    }
+
+    Ok(())
 
 }
 
 fn ask_for_filename() -> Result<String> {
-    rprompt::prompt_reply_stderr(
+    rprompt::prompt_reply_stderr(&format!(
+        "{}",
         "\
         Enter filename
-        > ",
-    )
+        > "
+            .blue()
+            .bold(),
+    ))
         .wrap_err("Failed to get filename")
         .map(|title| slug::slugify(title))
 }
@@ -62,9 +86,10 @@ fn confirm_filename(raw_title: &str) -> Result<String> {
         let result = rprompt::prompt_reply_stderr(
             &format!(
                 "\
-                current title: `{}`
+                {}{}
                 Do you want a different titlte? (y/N): ",
-                    raw_title,
+                "current title:".green().bold(),
+                raw_title,
             ),
         )
             .wrap_err("Failed to get input for y/n question")?;
